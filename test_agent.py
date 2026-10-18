@@ -1,5 +1,6 @@
 """离线验证：不调用DeepSeek；用预设模型动作检查真实执行与拒绝路径。"""
 import json
+import shutil
 import tempfile
 import unittest
 from pathlib import Path
@@ -16,6 +17,7 @@ def action(name, **arguments):
 
 
 class AgentTest(unittest.TestCase):
+    @unittest.skipUnless(shutil.which("docker"), "此端到端测试需要Docker沙箱")
     def test_feedback_and_finish(self):
         goal = Goal("bergman2019", "tiny_instance.json", ROOT / "data/FrontierOR/tasks/bergman2019")
         actions = [
@@ -43,6 +45,7 @@ class AgentTest(unittest.TestCase):
             self.assertEqual(state.status, "step_limit")
             self.assertFalse((Path(directory) / "best.py").exists())
 
+    @unittest.skipUnless(shutil.which("docker"), "此端到端测试需要Docker沙箱")
     def test_optional_output_field(self):
         # 官方解省略可选的sparse_defaults，通用层不应因此拒绝它。
         task = ROOT / "data/FrontierOR/tasks/damcikurt2016"

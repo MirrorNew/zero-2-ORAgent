@@ -5,9 +5,7 @@ import os
 import subprocess
 import sys
 import time
-from pathlib import Path
-
-ROOT = Path(__file__).resolve().parent
+from sandbox import execute
 
 
 def evaluate(goal, folder):
@@ -23,19 +21,17 @@ def evaluate(goal, folder):
         # 只给候选约定的输入字段，避免暴露数据附带的参考答案等元信息。
         instance = {key: instance[key] for key in schema if key in instance}
         (folder / "input.json").write_text(json.dumps(instance), encoding="utf-8")
-        command = [sys.executable, "-I", str(ROOT / "worker.py"), str(folder), str(goal.time_limit)]
-        executed = subprocess.run(command, cwd=folder, env=clean_env, capture_output=True,
-                                  text=True, encoding="utf-8", errors="replace", timeout=goal.time_limit + 10)
-        (folder / "solver.log").write_text(executed.stdout + executed.stderr, encoding="utf-8")
-        if executed.returncode:
-            raise ValueError("求解程序失败：" + executed.stderr[-2000:])
-        solution = json.loads((folder / "solution.json").read_text(encoding="utf-8"))
+        solution = execute(folder, goal.time_limit)
         # schema还含可选字段；必填/条件字段由该任务的官方checker判断。
         if not isinstance(solution, dict):
             raise ValueError("解必须是JSON对象")
         objective = solution.get("objective_value")
         if type(objective) not in (float, int) or not math.isfinite(objective):
             raise ValueError("objective_value 必须是有限数字")
+        # 容器已经停止；重新落盘到它从未能访问的位置，独立生成验收结果。
+        (folder / "solution.json").write_text(json.dumps(solution, allow_nan=False), encoding="utf-8")
+        if (folder / "checker.json").exists():
+            raise ValueError("验收结果路径必须是新的")
         command = [sys.executable, str(goal.task_dir / "feasibility_check.py"),
                    "--instance_path", str(instance_path), "--solution_path", str(folder / "solution.json"),
                    "--result_path", str(folder / "checker.json")]
@@ -46,7 +42,7 @@ def evaluate(goal, folder):
         check = json.loads((folder / "checker.json").read_text(encoding="utf-8"))
         result = {"valid": check.get("feasible") is True, "objective": objective,
                   "violations": check.get("violations", [])[:5]}
-    except (ValueError, KeyError, OSError, subprocess.TimeoutExpired) as error:
+    except (ValueError, KeyError, OSError, RecursionError, OverflowError, subprocess.TimeoutExpired) as error:
         result = {"valid": False, "error": str(error)}
     result["seconds"] = round(time.monotonic() - started, 3)
     (folder / "evaluation.json").write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
