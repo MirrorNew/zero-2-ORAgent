@@ -75,7 +75,7 @@ def main():
     manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
     print(json.dumps({key: value for key, value in manifest.items() if key != "files"}), flush=True)
     downloaded = 0
-    with ThreadPoolExecutor(max_workers=8) as pool:
+    with ThreadPoolExecutor(max_workers=32) as pool:
         for index, size in enumerate(pool.map(lambda item: download_file(item, release["sha"]), files), 1):
             downloaded += size
             if index % 25 == 0 or index == len(files):
