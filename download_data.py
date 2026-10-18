@@ -52,7 +52,12 @@ def download_file(entry, revision):
             print(f"Retry {attempt + 1}: {relative}: {type(error).__name__}", flush=True)
             if attempt == 3:
                 raise
-            time.sleep(2 ** attempt)
+            response = getattr(error, "response", None)
+            delay = 2 ** attempt
+            if response is not None and response.status_code == 429:
+                delay = int(response.headers.get("Retry-After", "60")) + 1
+                print(f"Rate limit: waiting {delay} seconds", flush=True)
+            time.sleep(delay)
 
 
 def main():
@@ -70,7 +75,7 @@ def main():
     manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
     print(json.dumps({key: value for key, value in manifest.items() if key != "files"}), flush=True)
     downloaded = 0
-    with ThreadPoolExecutor(max_workers=16) as pool:
+    with ThreadPoolExecutor(max_workers=8) as pool:
         for index, size in enumerate(pool.map(lambda item: download_file(item, release["sha"]), files), 1):
             downloaded += size
             if index % 25 == 0 or index == len(files):
