@@ -6,6 +6,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from agent import Goal, ROOT, run
+from tools import solve
 
 
 def action(name, **arguments):
@@ -41,6 +42,18 @@ class AgentTest(unittest.TestCase):
                 state = run(goal, Path(directory), None, max_steps=1)
             self.assertEqual(state.status, "step_limit")
             self.assertFalse((Path(directory) / "best.py").exists())
+
+    def test_optional_output_field(self):
+        # 官方解省略可选的sparse_defaults，通用层不应因此拒绝它。
+        task = ROOT / "data/FrontierOR/tasks/damcikurt2016"
+        reference = json.loads((task / "gurobi_solution/tiny_solution.json").read_text(encoding="utf-8"))
+        self.assertNotIn("sparse_defaults", reference)
+        goal = Goal("damcikurt2016", "tiny_instance.json", task)
+        with tempfile.TemporaryDirectory() as directory:
+            result = solve(goal, Path(directory) / "candidate",
+                           code=f"def solve(instance, time_limit): return {reference!r}",
+                           formulation="官方已知可行解，仅测试验收接口，不代表模型能力")
+            self.assertTrue(result["valid"], result)
 
 
 if __name__ == "__main__":

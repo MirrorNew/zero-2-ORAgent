@@ -21,7 +21,7 @@ def evaluate(goal, folder):
         instance = json.loads(instance_path.read_text(encoding="utf-8"))
         schema = json.loads((goal.task_dir / "instance_schema.json").read_text(encoding="utf-8"))
         # 只给候选约定的输入字段，避免暴露数据附带的参考答案等元信息。
-        instance = {key: instance[key] for key in schema}
+        instance = {key: instance[key] for key in schema if key in instance}
         (folder / "input.json").write_text(json.dumps(instance), encoding="utf-8")
         command = [sys.executable, "-I", str(ROOT / "worker.py"), str(folder), str(goal.time_limit)]
         executed = subprocess.run(command, cwd=folder, env=clean_env, capture_output=True,
@@ -30,9 +30,9 @@ def evaluate(goal, folder):
         if executed.returncode:
             raise ValueError("求解程序失败：" + executed.stderr[-2000:])
         solution = json.loads((folder / "solution.json").read_text(encoding="utf-8"))
-        required = json.loads((goal.task_dir / "solution_schema.json").read_text(encoding="utf-8"))
-        if not isinstance(solution, dict) or not required.keys() <= solution.keys():
-            raise ValueError("解缺少 solution_schema 要求的字段")
+        # schema还含可选字段；必填/条件字段由该任务的官方checker判断。
+        if not isinstance(solution, dict):
+            raise ValueError("解必须是JSON对象")
         objective = solution.get("objective_value")
         if type(objective) not in (float, int) or not math.isfinite(objective):
             raise ValueError("objective_value 必须是有限数字")

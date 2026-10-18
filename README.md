@@ -61,13 +61,13 @@ $env:PYTHONUTF8 = '1'
 
 本版固定数据版本：`609a71b64f33942ba2392a4835f05d56503961c2`。
 
-完整公开数据共180个任务、1080个实例，约33.3GB，不上传到本代码仓库。下载器逐文件核对官方长度和哈希：
+完整公开数据共180个任务、1080个实例，约33.3GB，只放本地，不上传到本代码仓库。下载器按官方清单下载并检查文件长度，不计算哈希：
 
 ```powershell
 & 'E:\my_evns\py312_torch28\python.exe' download_data.py
 ```
 
-本机数据实际放在 `E:\datasets\FrontierOR`，项目的 `data\FrontierOR` 是指向它的目录联接。其他机器默认直接下载到项目 `data/FrontierOR`。完整性状态见该目录的 `download_manifest.json`，只有 `complete=true` 才表示全部下载并验证完成。
+本机数据实际放在 `E:\datasets\FrontierOR`，项目的 `data\FrontierOR` 是指向它的目录联接。其他机器默认直接下载到项目 `data/FrontierOR`。下载状态见该目录的 `download_manifest.json`，只有 `complete=true` 才表示清单中的文件全部下载完成。
 
 Agent读取题面与输入/输出schema。候选只接收schema声明的输入字段；参考模型、参考程序和参考答案不进入模型上下文。官方checker保持原样，执行时保留原任务目录以支持辅助模块。
 
