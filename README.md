@@ -1,4 +1,6 @@
-# ORPi：最小 FrontierOR Agent
+# zero-2-ORAgent：最小 FrontierOR Agent
+
+GitHub：[MirrorNew/zero-2-ORAgent](https://github.com/MirrorNew/zero-2-ORAgent)。
 
 一个面向 FrontierOR 全部任务格式的 **Python 单 Agent**。模型从题目建立数学模型，自主决定搜索、运行求解代码、修正或提交。当前先验收一个任务，不声称已成功求解全部 180 题。
 
