@@ -31,3 +31,12 @@
 通用核心依赖官方checker；它不是对所有任务的独立数学证明。例如此任务的官方checker会把某些非整数索引转换为整数，因此本次验收额外严格检查了索引类型。官方数据保持原样，没有修改checker。
 
 本机真实轨迹和程序保存在 `outputs/20261018-192157-054803/`，该运行目录不上传仓库。完整数据下载状态应以 `data/FrontierOR/download_manifest.json` 为准。
+
+## 沙箱验收（2026-10-19）
+
+- 实现版本：`7952577`。主Agent循环不变，候选执行改为默认断网的Docker容器。
+- [真实Docker CI记录](https://github.com/MirrorNew/zero-2-ORAgent/actions/runs/39147328913)：18项测试全部通过，无跳过，含12项容器集成测试。
+- 验证文件只读和宿主秘密不可见、网络隔离、真实cgroup内存/CPU/PID限制、内存与进程耗尽、64 MiB总输出限制、超时后后代清理、不同UID管道保护、链接/FIFO拒绝、伪造checker结果拒绝。
+- 普通Python、Gurobi 12.0.2和COPT 8.0.5均在断网容器中求解人工小实例成功。测试不读取FrontierOR、不给容器许可证或模型密钥，也不调用DeepSeek。
+- 本机Docker Desktop 4.95.0和WSL 3.0.3.0已安装，安装退出码均为0，版本命令正常。VirtualMachinePlatform启用成功并明确返回需要重启；本机容器后端仍待重启后验收。
+- 远程CI通过不等于本机后端已启动，也不等于之前2244的结果已在沙箱内重跑。
