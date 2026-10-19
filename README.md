@@ -109,11 +109,12 @@ Agent读取题面与输入/输出schema。候选只接收schema声明的输入�
 
 CPU配额不等于累计CPU秒数；执行总时长由宿主计时。Docker守护进程和宿主内核属于可信基础设施，清理失败会拒绝验收并报告错误。这个小沙箱不承诺抵御内核或Docker自身漏洞。
 
-镜像有Gurobi/COPT运行依赖，但Windows许可证不会自动带入。可先用其内置的小规模许可；需要联网或其他许可证时单独处理。此前2244的真实模型验收发生在加入沙箱之前，不冒充沙箱运行结果。
+镜像有Gurobi/COPT运行依赖，但Windows许可证不会自动带入。可先用其内置的小规模许可；需要联网或其他许可证时单独处理。2026-10-19已在本机断网沙箱中重放此前生成的真实候选，官方checker与独立核算均通过，目标值仍为2244；没有新调用模型。详细证据见 [VERIFICATION.md](VERIFICATION.md)。
 
 沙箱测试只使用人工小样例，不读取FrontierOR，不调用DeepSeek，不上传数据。GitHub Actions用真实Linux Docker执行隔离探针；本机没有Docker时会明确跳过集成测试，CI设置`DOCKER_TESTS=1`后缺少Docker则直接失败：
 
 ```powershell
+$env:DOCKER_TESTS = '1'
 & 'E:\my_evns\py312_torch28\python.exe' -m unittest test_sandbox -v
 ```
 

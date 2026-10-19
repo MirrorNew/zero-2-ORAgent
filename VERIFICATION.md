@@ -38,5 +38,14 @@
 - [真实Docker CI记录](https://github.com/MirrorNew/zero-2-ORAgent/actions/runs/39147328913)：18项测试全部通过，无跳过，含12项容器集成测试。
 - 验证文件只读和宿主秘密不可见、网络隔离、真实cgroup内存/CPU/PID限制、内存与进程耗尽、64 MiB总输出限制、超时后后代清理、不同UID管道保护、链接/FIFO拒绝、伪造checker结果拒绝。
 - 普通Python、Gurobi 12.0.2和COPT 8.0.5均在断网容器中求解人工小实例成功。测试不读取FrontierOR、不给容器许可证或模型密钥，也不调用DeepSeek。
-- 本机Docker Desktop 4.95.0和WSL 3.0.3.0已安装，安装退出码均为0，版本命令正常。VirtualMachinePlatform启用成功并明确返回需要重启；本机容器后端仍待重启后验收。
-- 远程CI通过不等于本机后端已启动，也不等于之前2244的结果已在沙箱内重跑。
+- 本机重启后，Docker Desktop 4.95.0 / WSL 3.0.3.0后端已启动。Docker Engine 29.8.2使用Linux容器和cgroup v2，报告内存、swap、CPU配额和PID限制均可用。数据盘实际位于 `E:\DockerData\disk\docker_data.vhdx`。
+- 本机成功构建 `orpi-sandbox:1`，设置 `DOCKER_TESTS=1` 后运行 `python -m unittest test_sandbox test_agent -v`：21项中20项通过、1项跳过，耗时46.403秒。唯一跳过项是宿主Windows没有创建符号链接的权限；容器内符号链接拒绝测试已通过。12项容器集成测试和3项Agent测试全部通过。
+- 本机断网容器中的Gurobi/COPT均通过小LP检查。测试日志保存在 `outputs/sandbox-validation-20261019.log`，不上传仓库。
+
+### 真实候选的本机沙箱重放
+
+- 原样重用 `outputs/20261018-192157-054803/best.py`，没有新调用DeepSeek，也没有把参考解交给候选。
+- 任务仍为 `bergman2019/tiny_instance.json`。候选在断网、受资源限制的容器内执行；容器移除后，宿主使用未修改的官方checker验收通过，目标值 **2244**。
+- 独立检查新解：17个分配对均为严格整数、索引合法、物品不重复；载重 `[112,109,106]` 不超过容量 `[114,114,114]`。个体收益888 + 成对收益1356 = **2244**，与声明值及官方参考值一致。
+- 本次执行与验收耗时3.250秒，不含镜像构建和模型生成时间。达到参考值的结论边界与上文相同，不扩展为全部任务成功或独立最优性证明。
+- 新结果及独立核算保存到 `outputs/sandbox-replay-20261019-134845-971704/`。这次是已生成候选的沙箱重放，不是新增模型端到端生成成绩。
