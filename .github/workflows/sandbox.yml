@@ -15,6 +15,6 @@ jobs:
           python-version: '3.12'
       - run: python -m pip install openai requests
       - run: docker build -t orpi-sandbox:1 .
-      - run: python -m unittest test_sandbox -v
+      - run: python -m unittest test_sandbox test_terminal_ui -v
         env:
           DOCKER_TESTS: '1'

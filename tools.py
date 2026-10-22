@@ -2,6 +2,7 @@
 import re
 import requests
 from evaluator import evaluate
+from terminal_ui import ui
 
 TOOL_SCHEMAS = [
     {"type": "function", "function": {
@@ -25,17 +26,20 @@ TOOL_SCHEMAS = [
 
 def search(query):
     try:
-        response = requests.get("https://api.crossref.org/works", params={"query": query[:300], "rows": 3}, timeout=20)
-        response.raise_for_status()
-        return {"references": [{"title": item.get("title", []), "url": item.get("URL"),
-                "abstract": re.sub("<[^>]+>", "", item.get("abstract", ""))[:2000]}
-                for item in response.json()["message"]["items"]]}
+        with ui.stage("搜索资料", "Crossref查询：" + query[:300]):
+            response = requests.get("https://api.crossref.org/works", params={"query": query[:300], "rows": 3}, timeout=20)
+            response.raise_for_status()
+            return {"references": [{"title": item.get("title", []), "url": item.get("URL"),
+                    "abstract": re.sub("<[^>]+>", "", item.get("abstract", ""))[:2000]}
+                    for item in response.json()["message"]["items"]]}
     except (requests.RequestException, ValueError, KeyError) as error:
         return {"error": str(error)}
 
 
 def solve(goal, folder, code, formulation):
-    folder.mkdir(parents=True)
-    (folder / "candidate.py").write_text(code, encoding="utf-8")
-    (folder / "formulation.md").write_text(formulation, encoding="utf-8")
+    with ui.stage("保存候选", f"代码与建模说明：{folder}"):
+        folder.mkdir(parents=True)
+        (folder / "candidate.py").write_text(code, encoding="utf-8")
+        (folder / "formulation.md").write_text(formulation, encoding="utf-8")
+    ui.note("建模说明", formulation)
     return evaluate(goal, folder)

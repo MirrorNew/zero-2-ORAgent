@@ -9,6 +9,7 @@ from pathlib import Path
 
 from openai import OpenAI
 from tools import TOOL_SCHEMAS, search, solve
+from terminal_ui import ui
 
 ROOT = Path(__file__).resolve().parent
 
@@ -68,22 +69,31 @@ def model(client, messages):
 
 
 def run(goal, output, client, max_steps=8):
-    state, memory = State(), Memory()
-    messages = [{"role": "system", "content": policy(goal)},
-                {"role": "user", "content": f"解决 {goal.instance}。" + memory.recall(goal)}]
+    with ui.stage("准备任务", "读取题面、输入/输出schema，初始化状态并调用记忆占位接口"):
+        state, memory = State(), Memory()
+        messages = [{"role": "system", "content": policy(goal)},
+                    {"role": "user", "content": f"解决 {goal.instance}。" + memory.recall(goal)}]
     for step in range(1, max_steps + 1):
-        state.step = step
-        messages.append({"role": "user", "content": "当前状态：" + json.dumps(state.__dict__, ensure_ascii=False)})
-        answer = model(client, messages)
-        messages.append(answer)
-        calls = answer.get("tool_calls", [])
-        print(f"Step {step}: " + ", ".join(c["function"]["name"] for c in calls), flush=True)
+        ui.begin_round(step)
+        with ui.stage("整理模型输入", "把本轮状态加入已有消息历史"):
+            state.step = step
+            messages.append({"role": "user", "content": "当前状态：" + json.dumps(state.__dict__, ensure_ascii=False)})
+        ui.note("当前状态", json.dumps(state.__dict__, ensure_ascii=False))
+        with ui.stage("模型请求", "等待DeepSeek决定下一动作；当前为非流式请求，不显示内部思考"):
+            answer = model(client, messages)
+        with ui.stage("读取模型响应"):
+            messages.append(answer)
+            calls = answer.get("tool_calls", [])
+        if not calls:
+            ui.note("未选择工具", "本轮仍计入预算，将带着历史继续下一轮。\n" + (answer.get("content") or ""))
         for call in calls:
             name = call["function"]["name"]
+            ui.note("模型选择", {"search": "搜索资料", "solve": "生成并验证候选", "finish": "提交候选"}.get(name, name))
             try:
-                if len(calls) != 1:
-                    raise ValueError("每轮只选择一个工具")
-                args = json.loads(call["function"]["arguments"])
+                with ui.stage("检查动作", "每轮只允许一个工具，并解析工具参数"):
+                    if len(calls) != 1:
+                        raise ValueError("每轮只选择一个工具")
+                    args = json.loads(call["function"]["arguments"])
                 if name == "search":
                     result = search(**args)
                 elif name == "solve":
@@ -92,30 +102,39 @@ def run(goal, output, client, max_steps=8):
                     state.results[number] = result
                     result = {"candidate_id": number, **result}
                 elif name == "finish":
-                    number = args["candidate_id"]
-                    if not state.results.get(number, {}).get("valid"):
-                        raise ValueError("只能提交已经通过验证的 candidate_id")
-                    folder = output / f"candidate_{number}"
-                    shutil.copyfile(folder / "candidate.py", output / "best.py")
-                    shutil.copyfile(folder / "solution.json", output / "solution.json")
-                    report = (folder / "formulation.md").read_text(encoding="utf-8")
-                    (output / "report.md").write_text(report + "\n\n" + args["summary"], encoding="utf-8")
-                    state.status = "completed"
-                    result = {"completed": True, "candidate_id": number, **state.results[number]}
-                    (output / "result.json").write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
+                    with ui.stage("提交检查与保存", "只允许提交已通过验收的候选"):
+                        number = args["candidate_id"]
+                        if not state.results.get(number, {}).get("valid"):
+                            raise ValueError("只能提交已经通过验证的 candidate_id")
+                        folder = output / f"candidate_{number}"
+                        shutil.copyfile(folder / "candidate.py", output / "best.py")
+                        shutil.copyfile(folder / "solution.json", output / "solution.json")
+                        report = (folder / "formulation.md").read_text(encoding="utf-8")
+                        (output / "report.md").write_text(report + "\n\n" + args["summary"], encoding="utf-8")
+                        state.status = "completed"
+                        result = {"completed": True, "candidate_id": number, **state.results[number]}
+                        (output / "result.json").write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
+                    ui.note("提交完成", f"候选{number}，目标值{result['objective']}\n" + args["summary"])
                 else:
                     raise ValueError("未知工具：" + name)
             except (ValueError, KeyError, TypeError, OSError) as error:
                 result = {"error": str(error)}
-            messages.append({"role": "tool", "tool_call_id": call["id"], "content": json.dumps(result, ensure_ascii=False)})
-            print(json.dumps(result, ensure_ascii=False), flush=True)
-        (output / "trace.json").write_text(json.dumps(messages, ensure_ascii=False, indent=2), encoding="utf-8")
+            with ui.stage("反馈写回", "本次工具结果会作为下一轮模型输入"):
+                messages.append({"role": "tool", "tool_call_id": call["id"], "content": json.dumps(result, ensure_ascii=False)})
+            ui.note("动作失败" if "error" in result else "工具反馈", json.dumps(result, ensure_ascii=False))
+        with ui.stage("保存本轮轨迹", str(output / "trace.json")):
+            (output / "trace.json").write_text(json.dumps(messages, ensure_ascii=False, indent=2), encoding="utf-8")
+        ui.end_round()
         if state.status == "completed":
+            ui.note("停止判断", "已完成合法提交，结束Agent循环；这不代表证明全局最优。")
             break
+        ui.note("停止判断", "尚未提交，继续下一轮。" if step < max_steps else "轮数已用尽。")
     else:
         state.status = "step_limit"
-    memory.remember(goal, state)
-    (output / "state.json").write_text(json.dumps(state.__dict__, ensure_ascii=False, indent=2), encoding="utf-8")
+        ui.note("达到轮数上限", "本次未完成提交。")
+    with ui.stage("保存最终状态", "调用记忆占位接口并保存state.json"):
+        memory.remember(goal, state)
+        (output / "state.json").write_text(json.dumps(state.__dict__, ensure_ascii=False, indent=2), encoding="utf-8")
     return state
 
 
@@ -144,8 +163,15 @@ def main():
         parser.error("任务实例尚未下载，先运行 download_data.py")
     output = ROOT / "outputs" / datetime.now().strftime("%Y%m%d-%H%M%S-%f")
     output.mkdir(parents=True)
-    print(f"输出目录：{output}", flush=True)
-    state = run(goal, output, client, args.max_steps)
+    try:
+        with ui.session(goal, output, args.max_steps):
+            state = run(goal, output, client, args.max_steps)
+    except KeyboardInterrupt:
+        print("用户已中止运行。", flush=True)
+        return 130
+    except Exception as error:
+        print(f"运行失败：{type(error).__name__}。请查看上方提示和输出目录。", flush=True)
+        return 1  # 界面已显示并保存异常；不把失败伪装成completed。
     print("结束状态：" + state.status)
     return 0 if state.status == "completed" else 1
 

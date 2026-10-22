@@ -22,6 +22,8 @@ GitHub：[MirrorNew/zero-2-ORAgent](https://github.com/MirrorNew/zero-2-ORAgent)
 
 `sandbox.py` 创建和移除受限Docker容器；容器里的 `worker.py` 调用候选的 `solve(instance, time_limit)`，`collect.py` 只取回有大小上限的解和日志。Agent决策循环不因此改变。
 
+`terminal_ui.py` 是独立的终端显示层，只用Python标准库，不参与动作选择。代码中的 `with ui.stage("阶段名称")` 为真实操作计时，操作结束或异常都会留下记录。
+
 ## 为什么是 Agent
 
 循环里没有规定“先搜索，再求解”。每轮模型读取状态与历史，自行调用一个工具：
@@ -43,6 +45,14 @@ $env:PYTHONUTF8 = '1'
 ```
 
 在本机 `.env` 中设置 `DEEPSEEK_API_KEY=你的密钥`。环境变量优先；密钥和运行目录不会提交 Git。
+
+本机也可双击 `run_agent.bat`，打开黑底终端，使用同一个Python环境和默认任务；运行结束后窗口保留。双击会真实调用模型。带参数启动可用 `run_agent.bat --task bergman2019 --max-steps 8`。
+
+运行时持续显示当前轮次、阶段、阶段已用时间、本轮已用时间和总时间。历史记录保留准备任务、模型请求、动作检查、搜索、候选保存、实例准备、Docker检查/创建/启动、候选执行、输出收集、容器移除、解格式检查、官方checker、验收结果、反馈写回、轨迹保存和停止判断。没有工具、无效动作、验收失败、轮数用尽和中止也会明确显示。
+
+时间使用高精度单调计时器：每个阶段结束记录秒数，每轮另有总耗时，运行总时间从界面启动计时。小于1毫秒的阶段显示 `<0.001秒`，日志保留6位小数。轮次是决策预算，不是完成百分比；非流式模型请求期间只显示等待时间，候选求解器的内部进度仍留在隔离日志中。阶段“结束”表示操作返回，解是否可行以“验收通过/未通过”为准。
+
+普通终端每0.1秒刷新当前状态行；输出重定向时自动变为逐条中文日志。模型和工具文字中的终端控制字符会被转义。完整事件与计时同时保存在本次运行目录的 `progress.jsonl`，不会进入模型上下文。
 
 候选执行需要Docker Desktop的Linux容器后端（cgroup v2）。先安装并启动Docker，再在项目目录构建一次镜像：
 
@@ -87,13 +97,14 @@ Agent读取题面与输入/输出schema。候选只接收schema声明的输入�
 
 - `candidate_<动作编号>/`：建模说明、代码、输入、完整解、checker结果和求解日志。
 - `trace.json`：模型消息及工具反馈，便于逐步学习；不包含认证头。
+- `progress.jsonl`：中文阶段事件、每阶段/每轮/总耗时；可与trace对照阅读。
 - `state.json`：最后状态。
 - 成功后另有 `best.py`、`solution.json`、`report.md`、`result.json`。
 
 离线测试不调用DeepSeek：
 
 ```powershell
-& 'E:\my_evns\py312_torch28\python.exe' -m unittest test_agent -v
+& 'E:\my_evns\py312_torch28\python.exe' -m unittest test_agent test_terminal_ui -v
 ```
 
 测试覆盖提前提交拒绝、缺完整解拒绝、根据反馈重新求解、有效提交与步数上限。
